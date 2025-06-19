@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "875221166519",
+    "project_id": "hciproject-68016",
+    "storage_bucket": "hciproject-68016.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:875221166519:android:f9afc0a88b7537a6472032",
+        "android_client_info": {
+          "package_name": "com.example.hci_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWku6m9M18E6kewaBQ0hmuxLaUgDukLO0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

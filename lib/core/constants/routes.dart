@@ -4,6 +4,9 @@ class AppRoute {
   static const String onboarding = "/onboarding";
   static const String homepage = "/homapage";
 
+  // API Base URL
+  static const String baseUrl = "https://flutter-backend-dcqs.onrender.com";
+
   static const Color greenPrimary = Color.fromARGB(255, 172, 202, 70);
   static const Color greenSecondry = Color.fromARGB(255, 160, 201, 71);
   static const Color bluePrimary = Color.fromARGB(255, 38, 142, 198);

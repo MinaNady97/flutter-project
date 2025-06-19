@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:uuid/uuid.dart';
-import '../../models/event.dart';
+import 'package:hci_flutter/models/event.dart';
 import '../../controllers/calendar_controller.dart';
+import '../../controllers/home_controller.dart';
 
 class EventDialog extends StatefulWidget {
   final Event? event;
@@ -23,11 +23,11 @@ class _EventDialogState extends State<EventDialog> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _locationController;
-  late DateTime _startTime;
-  late DateTime _endTime;
-  late EventType _eventType;
-  late RecurrenceType _recurrenceType;
-  final List<String> _selectedAttendees = [];
+  late DateTime _startDate;
+  late TimeOfDay _startTime;
+  late DateTime _endDate;
+  late TimeOfDay _endTime;
+  late String _eventType;
 
   @override
   void initState() {
@@ -37,11 +37,16 @@ class _EventDialogState extends State<EventDialog> {
         TextEditingController(text: widget.event?.description ?? '');
     _locationController =
         TextEditingController(text: widget.event?.location ?? '');
-    _startTime = widget.event?.startTime ?? widget.selectedDate;
-    _endTime = widget.event?.endTime ??
-        widget.selectedDate.add(const Duration(hours: 1));
-    _eventType = widget.event?.type ?? EventType.other;
-    _recurrenceType = widget.event?.recurrence ?? RecurrenceType.none;
+    
+    _startDate = widget.event?.startTime ?? widget.selectedDate;
+    _startTime = TimeOfDay.fromDateTime(widget.event?.startTime ?? 
+        widget.selectedDate.add(const Duration(hours: 1)));
+    
+    _endDate = widget.event?.endTime ?? widget.selectedDate;
+    _endTime = TimeOfDay.fromDateTime(widget.event?.endTime ?? 
+        widget.selectedDate.add(const Duration(hours: 2)));
+    
+    _eventType = widget.event?.type.toString().split('.').last ?? 'general';
   }
 
   @override
@@ -54,6 +59,8 @@ class _EventDialogState extends State<EventDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final homeController = Get.find<HomeController>();
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SingleChildScrollView(
@@ -107,95 +114,60 @@ class _EventDialogState extends State<EventDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: ListTile(
-                      title: const Text('Start Time'),
-                      subtitle: Text(
-                        '${_startTime.hour}:${_startTime.minute.toString().padLeft(2, '0')}',
-                      ),
-                      onTap: () async {
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(_startTime),
-                        );
-                        if (time != null) {
-                          setState(() {
-                            _startTime = DateTime(
-                              _startTime.year,
-                              _startTime.month,
-                              _startTime.day,
-                              time.hour,
-                              time.minute,
-                            );
-                          });
-                        }
-                      },
+                    child: TextButton(
+                      onPressed: () => _selectDate(context, isStartDate: true),
+                      child: Text('Date: ${_formatDate(_startDate)}'),
                     ),
                   ),
                   Expanded(
-                    child: ListTile(
-                      title: const Text('End Time'),
-                      subtitle: Text(
-                        '${_endTime.hour}:${_endTime.minute.toString().padLeft(2, '0')}',
-                      ),
-                      onTap: () async {
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(_endTime),
-                        );
-                        if (time != null) {
-                          setState(() {
-                            _endTime = DateTime(
-                              _endTime.year,
-                              _endTime.month,
-                              _endTime.day,
-                              time.hour,
-                              time.minute,
-                            );
-                          });
-                        }
-                      },
+                    child: TextButton(
+                      onPressed: () => _selectTime(context, isStartTime: true),
+                      child: Text('Time: ${_formatTime(_startTime)}'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => _selectDate(context, isStartDate: false),
+                      child: Text('End Date: ${_formatDate(_endDate)}'),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => _selectTime(context, isStartTime: false),
+                      child: Text('End Time: ${_formatTime(_endTime)}'),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<EventType>(
+              DropdownButtonFormField<String>(
                 value: _eventType,
                 decoration: const InputDecoration(
                   labelText: 'Event Type',
                   border: OutlineInputBorder(),
                 ),
-                items: EventType.values.map((type) {
+                items: [
+                  'general',
+                  'birthday',
+                  'appointment',
+                  'meeting',
+                  'reminder',
+                  'other'
+                ].map((type) {
                   return DropdownMenuItem(
                     value: type,
-                    child: Text(type.toString().split('.').last),
+                    child: Text(type.capitalizeFirst!),
                   );
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
                     setState(() {
                       _eventType = value;
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<RecurrenceType>(
-                value: _recurrenceType,
-                decoration: const InputDecoration(
-                  labelText: 'Recurrence',
-                  border: OutlineInputBorder(),
-                ),
-                items: RecurrenceType.values.map((type) {
-                  return DropdownMenuItem(
-                    value: type,
-                    child: Text(type.toString().split('.').last),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _recurrenceType = value;
                     });
                   }
                 },
@@ -210,7 +182,7 @@ class _EventDialogState extends State<EventDialog> {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: _saveEvent,
+                    onPressed: () => _saveEvent(homeController),
                     child: Text(widget.event == null ? 'Add' : 'Save'),
                   ),
                 ],
@@ -222,47 +194,96 @@ class _EventDialogState extends State<EventDialog> {
     );
   }
 
-  void _saveEvent() {
-    if (_formKey.currentState?.validate() ?? false) {
-      final controller = Get.find<CalendarController>();
-      final event = Event(
-        id: widget.event?.id ?? const Uuid().v4(),
-        title: _titleController.text,
-        description: _descriptionController.text,
-        startTime: _startTime,
-        endTime: _endTime,
-        type: _eventType,
-        color: _getColorForEventType(_eventType),
-        location: _locationController.text,
-        attendees: _selectedAttendees,
-        creatorId: 'current_user_id', // TODO: Get actual user ID
-        recurrence: _recurrenceType,
-        createdAt: widget.event?.createdAt ?? DateTime.now(),
-        lastModified: DateTime.now(),
-      );
-
-      if (widget.event == null) {
-        controller.addEvent(event);
-      } else {
-        controller.updateEvent(event);
-      }
-
-      Get.back();
+  Future<void> _selectDate(BuildContext context, {required bool isStartDate}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStartDate ? _startDate : _endDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStartDate) {
+          _startDate = picked;
+        } else {
+          _endDate = picked;
+        }
+      });
     }
   }
 
-  Color _getColorForEventType(EventType type) {
-    switch (type) {
-      case EventType.birthday:
-        return Colors.pink;
-      case EventType.appointment:
-        return Colors.blue;
-      case EventType.meeting:
-        return Colors.green;
-      case EventType.reminder:
-        return Colors.orange;
-      case EventType.other:
-        return Colors.purple;
+  Future<void> _selectTime(BuildContext context, {required bool isStartTime}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: isStartTime ? _startTime : _endTime,
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStartTime) {
+          _startTime = picked;
+        } else {
+          _endTime = picked;
+        }
+      });
     }
+  }
+
+  Future<void> _saveEvent(HomeController homeController) async {
+    if (_formKey.currentState?.validate() ?? false) {
+      final controller = Get.find<CalendarController>();
+
+      final startDateTime = DateTime(
+        _startDate.year,
+        _startDate.month,
+        _startDate.day,
+        _startTime.hour,
+        _startTime.minute,
+      );
+
+      final endDateTime = DateTime(
+        _endDate.year,
+        _endDate.month,
+        _endDate.day,
+        _endTime.hour,
+        _endTime.minute,
+      );
+
+      if (endDateTime.isBefore(startDateTime)) {
+        Get.snackbar('Error', 'End time cannot be before start time');
+        return;
+      }
+
+      final eventData = {
+        "title": _titleController.text,
+        "description": _descriptionController.text,
+        "location": _locationController.text,
+        "start_time": startDateTime.toUtc().toIso8601String(),
+        "end_time": endDateTime.toUtc().toIso8601String(),
+        "type": _eventType,
+        "priority": "normal",
+        "family_id": homeController.familyId,
+        "created_by": homeController.userId,
+      };
+
+      try {
+        if (widget.event == null) {
+          await controller.addEventFromForm(eventData);
+        } else {
+          // TODO: Implement update event
+          Get.snackbar('Info', 'Update functionality not implemented yet');
+        }
+        Get.back();
+      } catch (e) {
+        Get.snackbar('Error', 'Failed to save event');
+      }
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _formatTime(TimeOfDay time) {
+    return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

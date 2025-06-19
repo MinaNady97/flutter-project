@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:hci_flutter/core/constants/routes.dart';
 import 'package:latlong2/latlong.dart';
 import '../../controllers/emergency_controller.dart';
 import '../../models/emergency_alert.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../controllers/home_controller.dart';
 
 class EmergencyScreen extends StatelessWidget {
   const EmergencyScreen({super.key});
@@ -13,35 +17,39 @@ class EmergencyScreen extends StatelessWidget {
     final controller = Get.put(EmergencyController());
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildEmergencyTypes(controller),
-                      const SizedBox(height: 24),
-                      _buildActiveAlerts(controller),
-                      const SizedBox(height: 24),
-                      _buildLocationMap(controller),
-                    ],
-                  ),
+      body: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildEmergencyTypes(controller),
+                    const SizedBox(height: 24),
+                    _buildActiveAlerts(controller),
+                    const SizedBox(height: 24),
+                    _buildLocationMap(controller),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showEmergencyDialog(context, controller),
-        backgroundColor: Colors.red,
-        icon: const Icon(Icons.warning_rounded),
-        label: const Text('SOS'),
+      floatingActionButton: Align(
+        alignment: Alignment.bottomRight,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 70.0, right: 70.0),
+          child: FloatingActionButton(
+            heroTag: '_sendSosNotification',
+            onPressed: () => _sendSosNotification(context),
+            backgroundColor: Colors.black,
+            child: const Icon(Icons.sos),
+          ),
+        ),
       ),
     );
   }
@@ -413,5 +421,41 @@ class EmergencyScreen extends StatelessWidget {
 
   String _formatDateTime(DateTime dateTime) {
     return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} ${dateTime.day}/${dateTime.month}/${dateTime.year}';
+  }
+
+  void _sendSosNotification(BuildContext context) async {
+    final homeController = Get.find<HomeController>();
+    final emergencyController = Get.find<EmergencyController>();
+    await emergencyController.updateCurrentLocation();
+
+    final userId =
+        homeController.userId; // Replace with actual user ID if available
+    final familyId = homeController.getFamilyId();
+    final lat = emergencyController.currentLatitude.value;
+    final lng = emergencyController.currentLongitude.value;
+
+    final payload = {
+      "user_id": userId,
+      "family_id": familyId,
+      "location": {
+        "type": "Point",
+        "coordinates": [lng, lat], // [longitude, latitude]
+      },
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse('${AppRoute.baseUrl}/api/emergency'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+      if (response.statusCode == 200) {
+        Get.snackbar('Success', 'SOS notification sent!');
+      } else {
+        Get.snackbar('Error', 'Failed to send SOS: ${response.body}');
+      }
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to send SOS: $e');
+    }
   }
 }

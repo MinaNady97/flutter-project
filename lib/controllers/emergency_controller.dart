@@ -1,8 +1,10 @@
+import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/emergency_alert.dart';
+import 'package:geolocator/geolocator.dart';
 
 class EmergencyController extends GetxController {
   final RxList<EmergencyAlert> activeAlerts = <EmergencyAlert>[].obs;
@@ -11,6 +13,10 @@ class EmergencyController extends GetxController {
   final RxString currentLocation = ''.obs;
   final RxDouble currentLatitude = 0.0.obs;
   final RxDouble currentLongitude = 0.0.obs;
+  // Add inside your EmergencyController class
+  var isSendingSos = false.obs;
+
+  final mapController = MapController(); // ADD THIS
 
   @override
   void onInit() {
@@ -41,15 +47,37 @@ class EmergencyController extends GetxController {
     }
   }
 
-  Future<void> _updateCurrentLocation() async {
+  Future<void> updateCurrentLocation() async {
     try {
-      // For demo purposes, we'll use a fixed location
-      // In a real app, you would use a location package that works well with your setup
-      currentLatitude.value = 37.7749; // Example: San Francisco
-      currentLongitude.value = -122.4194;
-      currentLocation.value = 'San Francisco, CA, USA';
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          isLocationEnabled.value = false;
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        isLocationEnabled.value = false;
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      currentLatitude.value = position.latitude;
+      currentLongitude.value = position.longitude;
+      currentLocation.value = '${position.latitude}, ${position.longitude}';
+      isLocationEnabled.value = true;
+
+      // Move map to current location
+      mapController.move(
+        LatLng(currentLatitude.value, currentLongitude.value),
+        13.0, // desired zoom level
+      );
     } catch (e) {
-      print('Error updating location: $e');
+      print('Error getting real location: $e');
+      isLocationEnabled.value = false;
     }
   }
 
@@ -70,7 +98,7 @@ class EmergencyController extends GetxController {
     isSendingAlert.value = true;
 
     try {
-      await _updateCurrentLocation();
+      await updateCurrentLocation();
 
       final alert = EmergencyAlert(
         id: const Uuid().v4(),

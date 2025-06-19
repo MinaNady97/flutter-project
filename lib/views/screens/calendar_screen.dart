@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../../core/constants/routes.dart';
 import '../../controllers/calendar_controller.dart';
 import '../../models/event.dart';
 import '../widgets/event_dialog.dart';
+import '../../controllers/home_controller.dart';
 
 class CalendarScreen extends StatelessWidget {
   const CalendarScreen({super.key});
@@ -11,352 +13,346 @@ class CalendarScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = Get.put(CalendarController());
+    final homeController = Get.find<HomeController>();
 
     return Scaffold(
-      body: SizedBox.expand(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                // Profile, greeting, notification
-                Row(
-                  children: [
-                    const CircleAvatar(
-                      radius: 32,
-                      backgroundImage: NetworkImage(
-                        'https://randomuser.me/api/portraits/women/44.jpg',
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Good Morning,',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                          Text(
-                            'Farah',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.notifications_none,
-                        color: Colors.white, size: 32),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Tasks title
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Tasks',
-                      style: TextStyle(
-                        color: AppRoute.primaryColor,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        Get.dialog(
-                          EventDialog(
-                            selectedDate: controller.selectedDate.value,
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.add_circle_outline),
-                      color: AppRoute.primaryColor,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Task checkboxes
-                Obx(() {
-                  final events = controller
-                      .getEventsForDate(controller.selectedDate.value);
-                  return Column(
-                    children: events.map((event) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: CheckboxListTile(
-                          value: event.isCompleted,
-                          onChanged: (value) {
-                            if (value == true) {
-                              controller.markEventAsCompleted(event.id);
-                            }
-                          },
-                          title: Text(event.title),
-                          subtitle: Text(
-                            '${event.startTime.hour}:${event.startTime.minute.toString().padLeft(2, '0')} - ${event.endTime.hour}:${event.endTime.minute.toString().padLeft(2, '0')}',
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          secondary: PopupMenuButton(
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Edit'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Delete'),
-                              ),
-                            ],
-                            onSelected: (value) {
-                              if (value == 'edit') {
-                                Get.dialog(
-                                  EventDialog(
-                                    event: event,
-                                    selectedDate: controller.selectedDate.value,
-                                  ),
-                                );
-                              } else if (value == 'delete') {
-                                controller.deleteEvent(event.id);
-                              }
-                            },
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  );
-                }),
-                const SizedBox(height: 16),
-                // Calendar
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: Obx(() {
+        if (controller.isSyncing.value && controller.events.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            // Show loading indicator while refreshing
+            controller.isSyncing.value = true;
+            try {
+              await controller.fetchFamilyEvents(homeController.userId.value);
+            } finally {
+              controller.isSyncing.value = false;
+            }
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  // Profile header
+                  Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                '${_getMonthName(controller.selectedDate.value.month)}',
-                                style: const TextStyle(
-                                  color: AppRoute.secondaryColor,
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${controller.selectedDate.value.year}',
-                                style: const TextStyle(
-                                  color: AppRoute.secondaryColor,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              IconButton(
-                                onPressed: () {
-                                  final newDate = DateTime(
-                                    controller.selectedDate.value.year,
-                                    controller.selectedDate.value.month - 1,
-                                    1,
-                                  );
-                                  controller.selectedDate.value = newDate;
-                                },
-                                icon: const Icon(Icons.chevron_left),
-                                color: AppRoute.secondaryColor,
-                              ),
-                              IconButton(
-                                onPressed: () {
-                                  final newDate = DateTime(
-                                    controller.selectedDate.value.year,
-                                    controller.selectedDate.value.month + 1,
-                                    1,
-                                  );
-                                  controller.selectedDate.value = newDate;
-                                },
-                                icon: const Icon(Icons.chevron_right),
-                                color: AppRoute.secondaryColor,
-                              ),
-                            ],
-                          ),
-                        ],
+                      const CircleAvatar(
+                        radius: 32,
+                        backgroundImage: NetworkImage(
+                          'https://randomuser.me/api/portraits/women/44.jpg',
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      _CalendarWidget(
-                        selectedDate: controller.selectedDate.value,
-                        onDateSelected: (date) {
-                          controller.selectedDate.value = date;
-                        },
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Good Morning,',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            Text(
+                              homeController.username.value,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      Obx(() => IconButton(
+                          icon: Icon(
+                            controller.isAutoSyncEnabled.value
+                                ? Icons.sync_disabled
+                                : Icons.sync,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                          onPressed: () async {
+                            final newValue =
+                                !controller.isAutoSyncEnabled.value;
+                            controller.isAutoSyncEnabled.value = newValue;
+                            await controller.prefs
+                                ?.setBool('autoSync', newValue);
+
+                            if (newValue) {
+                              await controller.syncAllEventsToPhoneCalendar();
+                              Get.snackbar('Auto Sync', 'Auto-sync is ON');
+                            } else {
+                              Get.snackbar('Auto Sync', 'Auto-sync is OFF');
+                            }
+                          })),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+                  const SizedBox(height: 24),
 
-  String _getMonthName(int month) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December'
-    ];
-    return months[month - 1];
-  }
-}
-
-class _CalendarWidget extends StatelessWidget {
-  final DateTime selectedDate;
-  final Function(DateTime) onDateSelected;
-
-  const _CalendarWidget({
-    required this.selectedDate,
-    required this.onDateSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = Get.find<CalendarController>();
-    final firstDayOfMonth = DateTime(selectedDate.year, selectedDate.month, 1);
-    final lastDayOfMonth =
-        DateTime(selectedDate.year, selectedDate.month + 1, 0);
-    final firstWeekday = firstDayOfMonth.weekday;
-    final daysInMonth = lastDayOfMonth.day;
-
-    return Table(
-      border: TableBorder.symmetric(
-        inside: BorderSide(color: Colors.grey.shade200),
-      ),
-      children: [
-        const TableRow(
-          children: [
-            Center(
-                child:
-                    Text('Sun', style: TextStyle(fontWeight: FontWeight.bold))),
-            Center(
-                child:
-                    Text('Mon', style: TextStyle(fontWeight: FontWeight.bold))),
-            Center(
-                child:
-                    Text('Tue', style: TextStyle(fontWeight: FontWeight.bold))),
-            Center(
-                child:
-                    Text('Wed', style: TextStyle(fontWeight: FontWeight.bold))),
-            Center(
-                child:
-                    Text('Thu', style: TextStyle(fontWeight: FontWeight.bold))),
-            Center(
-                child:
-                    Text('Fri', style: TextStyle(fontWeight: FontWeight.bold))),
-            Center(
-                child:
-                    Text('Sat', style: TextStyle(fontWeight: FontWeight.bold))),
-          ],
-        ),
-        ...List.generate(6, (week) {
-          return TableRow(
-            children: List.generate(7, (day) {
-              final date = week * 7 + day - firstWeekday + 1;
-              final isToday = date == DateTime.now().day &&
-                  selectedDate.month == DateTime.now().month &&
-                  selectedDate.year == DateTime.now().year;
-              final isSelected = date == selectedDate.day;
-
-              if (date < 1 || date > daysInMonth) {
-                return const SizedBox(height: 40);
-              }
-
-              final events = controller.getEventsForDate(
-                DateTime(selectedDate.year, selectedDate.month, date),
-              );
-
-              return GestureDetector(
-                onTap: () {
-                  onDateSelected(
-                      DateTime(selectedDate.year, selectedDate.month, date));
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isToday
-                              ? AppRoute.secondaryColor
-                              : isSelected
-                                  ? AppRoute.primaryColor.withOpacity(0.1)
-                                  : null,
+                  // Calendar Section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: TableCalendar(
+                      firstDay:
+                          DateTime.now().subtract(const Duration(days: 365)),
+                      lastDay: DateTime.now().add(const Duration(days: 365)),
+                      focusedDay: controller.selectedDate.value,
+                      calendarFormat: CalendarFormat.month,
+                      startingDayOfWeek: StartingDayOfWeek.monday,
+                      headerStyle: HeaderStyle(
+                        formatButtonVisible: false,
+                        titleCentered: true,
+                        titleTextStyle: const TextStyle(
+                          color: AppRoute.secondaryColor,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        leftChevronIcon: const Icon(
+                          Icons.chevron_left,
+                          color: AppRoute.secondaryColor,
+                        ),
+                        rightChevronIcon: const Icon(
+                          Icons.chevron_right,
+                          color: AppRoute.secondaryColor,
+                        ),
+                      ),
+                      calendarStyle: CalendarStyle(
+                        todayDecoration: BoxDecoration(
+                          color: AppRoute.secondaryColor,
                           shape: BoxShape.circle,
                         ),
-                        padding: const EdgeInsets.all(8),
-                        child: Text(
-                          '$date',
-                          style: TextStyle(
-                            color: isToday
-                                ? Colors.white
-                                : isSelected
-                                    ? AppRoute.primaryColor
-                                    : AppRoute.secondaryColor,
-                            fontWeight: isToday || isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
+                        selectedDecoration: BoxDecoration(
+                          color: AppRoute.primaryColor.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppRoute.primaryColor,
+                            width: 1,
                           ),
+                        ),
+                        markerDecoration: BoxDecoration(
+                          color: AppRoute.primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        markerSize: 6,
+                        markerMargin: const EdgeInsets.only(top: 2),
+                      ),
+                      eventLoader: (day) => controller.getEventsForDate(day),
+                      selectedDayPredicate: (day) {
+                        return isSameDay(controller.selectedDate.value, day);
+                      },
+                      onDaySelected: (selectedDay, focusedDay) {
+                        controller.selectedDate.value = selectedDay;
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Tasks Section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Events',
+                        style: TextStyle(
+                          color: AppRoute.primaryColor,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (events.isNotEmpty)
-                        Container(
-                          margin: const EdgeInsets.only(top: 2),
-                          height: 4,
-                          width: 4,
-                          decoration: BoxDecoration(
-                            color: events.first.color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+                      IconButton(
+                        onPressed: () {
+                          Get.dialog(
+                            EventDialog(
+                              selectedDate: controller.selectedDate.value,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.add_circle_outline),
+                        color: AppRoute.primaryColor,
+                        iconSize: 32,
+                      ),
                     ],
                   ),
-                ),
-              );
-            }),
-          );
-        }),
-      ],
+                  const SizedBox(height: 12),
+
+                  // Events List
+                  Obx(() {
+                    final dayEvents = controller.getEventsForDate(
+                      controller.selectedDate.value,
+                    );
+
+                    if (dayEvents.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No events for this day',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: dayEvents.map((event) {
+                        final isCurrentUserCreator =
+                            event.creatorId == homeController.userId.value;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            leading: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: event.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            title: Text(
+                              event.title,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                decoration: event.isCompleted
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${event.startTime.hour}:${event.startTime.minute.toString().padLeft(2, '0')} - '
+                                  '${event.endTime.hour}:${event.endTime.minute.toString().padLeft(2, '0')}\n'
+                                  '${event.location}',
+                                ),
+                                if (event.participants.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Participants: ' +
+                                        event.participants
+                                            .map((p) => p.userName ?? 'Unknown')
+                                            .join(', '),
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            trailing: isCurrentUserCreator
+                                ? PopupMenuButton(
+                                    itemBuilder: (context) => [
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Delete'),
+                                      ),
+                                    ],
+                                    onSelected: (value) async {
+                                      if (value == 'edit') {
+                                        Get.dialog(
+                                          EventDialog(
+                                            event: event,
+                                            selectedDate: event.startTime,
+                                          ),
+                                        );
+                                      } else if (value == 'delete') {
+                                        await controller.deleteEvent(event.id);
+                                      }
+                                    },
+                                  )
+                                : null,
+                            onTap: () {
+                              _showEventDetails(context, event);
+                            },
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
     );
+  }
+
+  void _showEventDetails(BuildContext context, Event event) {
+    final controller = Get.find<CalendarController>();
+    final homeController = Get.find<HomeController>();
+    final isCurrentUserCreator = event.creatorId == homeController.userId.value;
+    final isCurrentUserParticipant =
+        event.participants.any((p) => p.userId == homeController.userId.value);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(event.title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              event.description,
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '${_formatDate(event.startTime)} - ${_formatTime(event.endTime)}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (event.location.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Location: ${event.location}'),
+            ],
+            if (event.participants.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text('Participants:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              ...event.participants
+                  .map((p) => Text(p.userName ?? 'Unknown'))
+                  .toList(),
+            ],
+            const SizedBox(height: 16),
+            if (!isCurrentUserParticipant && !isCurrentUserCreator)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    controller.joinEvent(event.id, homeController.userId.value,
+                        homeController.username.value);
+                  },
+                  child: const Text('Join Event'),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _formatTime(DateTime time) {
+    return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

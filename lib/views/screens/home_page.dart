@@ -7,6 +7,7 @@ import 'sos_screen.dart';
 import 'menu_screen.dart';
 import '../../core/constants/routes.dart';
 import '../../controllers/background_controller.dart';
+import '../../controllers/home_controller.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -21,16 +22,19 @@ class _HomePageState extends State<HomePage> {
   final BackgroundController _backgroundController = Get.put(
     BackgroundController(),
   );
+  late final HomeController _homeController;
 
   final List<Widget> _screens = [
-    const CalendarScreen(),
-    const WorkoutScreen(),
+    CalendarScreen(),
+    WorkoutScreen(),
     const MenuScreen(),
   ];
 
   @override
   void initState() {
     super.initState();
+    // Get the HomeController that was already initialized in main.dart
+    _homeController = Get.find<HomeController>();
     _backgroundController.changeBackground(_selectedIndex);
   }
 
@@ -71,12 +75,28 @@ class _HomePageState extends State<HomePage> {
         },
         letIndexChange: (index) => true,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Get.to(() => const SosScreen());
-        },
-        backgroundColor: Color(0XFFC30606),
-        child: const Icon(Icons.warning),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // FloatingActionButton(
+          //   heroTag: 'notification-settings',
+          //   onPressed: () {
+          //     Get.toNamed('/notification-settings');
+          //   },
+          //   backgroundColor: Colors.blue,
+          //   mini: true,
+          //   child: const Icon(Icons.notifications),
+          // ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'SosScreen',
+            onPressed: () {
+              Get.to(() => const SosScreen());
+            },
+            backgroundColor: Color(0XFFC30606),
+            child: const Icon(Icons.warning),
+          ),
+        ],
       ),
     );
   }

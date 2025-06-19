@@ -1,8 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
-enum EventType { birthday, appointment, meeting, reminder, other }
+enum EventType { birthday, appointment, meeting, reminder, general, other }
 
 enum RecurrenceType { none, daily, weekly, monthly, yearly }
+
+class EventParticipant {
+  final String userId;
+  final String? userName;
+
+  EventParticipant({required this.userId, this.userName});
+
+  factory EventParticipant.fromApiJson(Map<String, dynamic> json) {
+    return EventParticipant(
+      userId: json['user_id']?['\$oid'] ?? json['user_id'] ?? '',
+      userName: json['user_name'],
+    );
+  }
+}
 
 class Event {
   final String id;
@@ -13,7 +28,7 @@ class Event {
   final EventType type;
   final Color color;
   final String location;
-  final List<String> attendees;
+  final List<EventParticipant> participants;
   final String creatorId;
   final RecurrenceType recurrence;
   final bool isCompleted;
@@ -32,7 +47,7 @@ class Event {
     required this.type,
     required this.color,
     required this.location,
-    required this.attendees,
+    required this.participants,
     required this.creatorId,
     this.recurrence = RecurrenceType.none,
     this.isCompleted = false,
@@ -52,7 +67,7 @@ class Event {
     EventType? type,
     Color? color,
     String? location,
-    List<String>? attendees,
+    List<EventParticipant>? participants,
     String? creatorId,
     RecurrenceType? recurrence,
     bool? isCompleted,
@@ -71,7 +86,7 @@ class Event {
       type: type ?? this.type,
       color: color ?? this.color,
       location: location ?? this.location,
-      attendees: attendees ?? this.attendees,
+      participants: participants ?? this.participants,
       creatorId: creatorId ?? this.creatorId,
       recurrence: recurrence ?? this.recurrence,
       isCompleted: isCompleted ?? this.isCompleted,
@@ -83,52 +98,89 @@ class Event {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'startTime': startTime.toIso8601String(),
-      'endTime': endTime.toIso8601String(),
-      'type': type.toString(),
-      'color': color.value,
-      'location': location,
-      'attendees': attendees,
-      'creatorId': creatorId,
-      'recurrence': recurrence.toString(),
-      'isCompleted': isCompleted,
-      'isCancelled': isCancelled,
-      'attachments': attachments,
-      'additionalDetails': additionalDetails,
-      'createdAt': createdAt.toIso8601String(),
-      'lastModified': lastModified?.toIso8601String(),
-    };
+  factory Event.fromApiJson(Map<String, dynamic> json) {
+    List<EventParticipant> parsedParticipants = [];
+    if (json['participants'] is List) {
+      parsedParticipants = (json['participants'] as List)
+          .map((p) => EventParticipant.fromApiJson(p))
+          .where((p) => p.userId.isNotEmpty)
+          .toList();
+    }
+    return Event(
+      id: json['_id']?['\$oid'] ?? json['_id'] ?? const Uuid().v4(),
+      title: json['title'] ?? 'No Title',
+      description: json['description'] ?? '',
+      startTime: DateTime.parse(json['start_time']).toLocal(),
+      endTime: DateTime.parse(json['end_time']).toLocal(),
+      type: _parseEventType(json['type'] ?? 'general'),
+      color: _getColorForType(json['type'] ?? 'general'),
+      location: json['location'] ?? '',
+      participants: parsedParticipants,
+      creatorId: json['created_by']?.toString() ?? '',
+      recurrence: RecurrenceType.none,
+      isCompleted: json['status'] == 'completed',
+      isCancelled: json['status'] == 'cancelled',
+      attachments: [],
+      additionalDetails: {},
+      createdAt: json['created_at'] != null
+          ? (json['created_at']['\$date'] != null
+              ? DateTime.parse(json['created_at']['\$date']).toLocal()
+              : DateTime.parse(json['created_at']).toLocal())
+          : DateTime.now(),
+      lastModified: json['updated_at'] != null
+          ? (json['updated_at']['\$date'] != null
+              ? DateTime.parse(json['updated_at']['\$date']).toLocal()
+              : DateTime.parse(json['updated_at']).toLocal())
+          : null,
+    );
   }
 
-  factory Event.fromJson(Map<String, dynamic> json) {
-    return Event(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
-      startTime: DateTime.parse(json['startTime']),
-      endTime: DateTime.parse(json['endTime']),
-      type: EventType.values.firstWhere((e) => e.toString() == json['type']),
-      color: Color(json['color']),
-      location: json['location'],
-      attendees: List<String>.from(json['attendees']),
-      creatorId: json['creatorId'],
-      recurrence: RecurrenceType.values.firstWhere(
-        (e) => e.toString() == json['recurrence'],
-      ),
-      isCompleted: json['isCompleted'],
-      isCancelled: json['isCancelled'],
-      attachments: List<String>.from(json['attachments']),
-      additionalDetails: json['additionalDetails'],
-      createdAt: DateTime.parse(json['createdAt']),
-      lastModified:
-          json['lastModified'] != null
-              ? DateTime.parse(json['lastModified'])
-              : null,
-    );
+  static EventType _parseEventType(String type) {
+    switch (type.toLowerCase()) {
+      case 'birthday':
+        return EventType.birthday;
+      case 'appointment':
+        return EventType.appointment;
+      case 'meeting':
+        return EventType.meeting;
+      case 'reminder':
+        return EventType.reminder;
+      case 'general':
+        return EventType.general;
+      default:
+        return EventType.other;
+    }
+  }
+
+  static Color _getColorForType(String type) {
+    switch (type.toLowerCase()) {
+      case 'birthday':
+        return Colors.pink;
+      case 'appointment':
+        return Colors.blue;
+      case 'meeting':
+        return Colors.green;
+      case 'reminder':
+        return Colors.orange;
+      case 'general':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'description': description,
+      'start_time': startTime.toUtc().toIso8601String(),
+      'end_time': endTime.toUtc().toIso8601String(),
+      'type': type.toString().split('.').last,
+      'location': location,
+      'participants': participants,
+      'created_by': creatorId,
+      'status':
+          isCompleted ? 'completed' : (isCancelled ? 'cancelled' : 'upcoming'),
+    };
   }
 }
