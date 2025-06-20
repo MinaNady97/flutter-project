@@ -19,12 +19,26 @@ class SosScreen extends StatefulWidget {
 
 class _SosScreenState extends State<SosScreen> {
   late EmergencyController controller;
+  late HomeController homeController;
 
   @override
   void initState() {
     super.initState();
     controller = Get.put(EmergencyController());
+    homeController = Get.find<HomeController>();
     controller.updateCurrentLocation(); // move map to user location
+    // Fetch family alerts after a short delay to ensure familyId is loaded
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (homeController.familyId.value.isNotEmpty) {
+        controller.fetchFamilyAlerts(homeController.familyId.value);
+      } else {
+        ever(homeController.familyId, (id) {
+          if ((id as String).isNotEmpty) {
+            controller.fetchFamilyAlerts(id);
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -264,6 +278,7 @@ class _SosScreenState extends State<SosScreen> {
       );
 
       if (response.statusCode == 201) {
+        controller.fetchFamilyAlerts(homeController.familyId.value);
         Get.snackbar(
             'Notification Sent', 'Alert for $name dispatched successfully');
       } else {
@@ -289,34 +304,63 @@ class _SosScreenState extends State<SosScreen> {
             return const Text('Location services are disabled',
                 style: TextStyle(color: Colors.white70));
           }
-          return SizedBox(
-            height: 200,
-            child: FlutterMap(
-              mapController: controller.mapController,
-              options: MapOptions(
-                center: LatLng(controller.currentLatitude.value,
-                    controller.currentLongitude.value),
-                zoom: 13.0,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.hci_flutter',
-                ),
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: LatLng(controller.currentLatitude.value,
-                          controller.currentLongitude.value),
-                      width: 40,
-                      height: 40,
-                      child: const Icon(Icons.location_on,
-                          color: Colors.red, size: 40),
+          return Stack(
+            children: [
+              SizedBox(
+                height: 200,
+                child: FlutterMap(
+                  mapController: controller.mapController,
+                  options: MapOptions(
+                    center: controller.selectedAlertLocation.value ??
+                        LatLng(controller.currentLatitude.value,
+                            controller.currentLongitude.value),
+                    zoom: 13.0,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.hci_flutter',
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        // User location marker
+                        Marker(
+                          point: LatLng(controller.currentLatitude.value,
+                              controller.currentLongitude.value),
+                          width: 40,
+                          height: 40,
+                          child: const Icon(Icons.location_on,
+                              color: Colors.red, size: 40),
+                        ),
+                        // Selected alert marker
+                        if (controller.selectedAlertLocation.value != null)
+                          Marker(
+                            point: controller.selectedAlertLocation.value!,
+                            width: 40,
+                            height: 40,
+                            child: const Icon(Icons.warning,
+                                color: Colors.orange, size: 40),
+                          ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: FloatingActionButton(
+                  mini: true,
+                  backgroundColor: Colors.white,
+                  child: const Icon(Icons.my_location, color: Colors.red),
+                  onPressed: () {
+                    controller.centerMapOnUser();
+                  },
+                  tooltip: 'Current Location',
+                ),
+              ),
+            ],
           );
         }),
       ],
@@ -327,14 +371,27 @@ class _SosScreenState extends State<SosScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Recent Alerts',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Recent Alerts',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              onPressed: () {
+                controller.fetchFamilyAlerts(homeController.familyId.value);
+              },
+              tooltip: 'Refresh Alerts',
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         Obx(() {
-          final alerts = controller.getActiveAlerts();
+          final alerts = controller.familyAlerts.toList()
+            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
           if (alerts.isEmpty) {
             return const Text('No active alerts',
                 style: TextStyle(color: Colors.white70));
@@ -351,6 +408,7 @@ class _SosScreenState extends State<SosScreen> {
   }
 
   Widget _buildAlertItem(EmergencyAlert alert) {
+    final isMine = alert.senderId == homeController.userId.value;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -366,13 +424,22 @@ class _SosScreenState extends State<SosScreen> {
         title: Text(alert.message,
             style: const TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text('${alert.location}\n${_formatDateTime(alert.timestamp)}',
+        subtitle: Text(
+            'Lat: ${alert.latitude}, Lng: ${alert.longitude}\n${_formatDateTime(alert.timestamp)}',
             style: const TextStyle(color: Colors.white70)),
-        trailing: IconButton(
-          icon: const Icon(Icons.check_circle_outline, color: Colors.white),
-          onPressed: () =>
-              controller.acknowledgeAlert(alert.id, 'current_user_id'),
-        ),
+        onTap: () {
+          controller.centerMapOnAlert(alert.latitude, alert.longitude);
+        },
+        trailing: isMine
+            ? IconButton(
+                icon: const Icon(Icons.check_circle, color: Colors.green),
+                tooltip: 'Resolve Alert',
+                onPressed: () async {
+                  await controller.resolveAlertApi(alert.id);
+                  controller.fetchFamilyAlerts(homeController.familyId.value);
+                },
+              )
+            : null,
       ),
     );
   }
@@ -432,6 +499,7 @@ class _SosScreenState extends State<SosScreen> {
       );
 
       if (response.statusCode == 201) {
+        controller.fetchFamilyAlerts(homeController.familyId.value);
         Get.snackbar('Success', 'SOS notification sent!');
       } else {
         Get.snackbar('Error', 'Failed to send SOS: ${response.body}');
@@ -492,6 +560,7 @@ class _SosScreenState extends State<SosScreen> {
   }
 
   String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.hour}:${dateTime.minute} ${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    final cairoTime = dateTime.add(const Duration(hours: 3));
+    return '${cairoTime.hour.toString().padLeft(2, '0')}:${cairoTime.minute.toString().padLeft(2, '0')} ${cairoTime.day}/${cairoTime.month}/${cairoTime.year}';
   }
 }

@@ -1,10 +1,14 @@
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
+import 'package:hci_flutter/controllers/home_controller.dart';
 import 'package:uuid/uuid.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/emergency_alert.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import '../core/constants/routes.dart';
+import 'dart:convert';
 
 class EmergencyController extends GetxController {
   final RxList<EmergencyAlert> activeAlerts = <EmergencyAlert>[].obs;
@@ -17,6 +21,12 @@ class EmergencyController extends GetxController {
   var isSendingSos = false.obs;
 
   final mapController = MapController(); // ADD THIS
+
+  // Add for family alerts
+  final RxList<EmergencyAlert> familyAlerts = <EmergencyAlert>[].obs;
+  final Rx<LatLng?> selectedAlertLocation = Rx<LatLng?>(null);
+
+  final homeController = Get.find<HomeController>();
 
   @override
   void onInit() {
@@ -116,6 +126,7 @@ class EmergencyController extends GetxController {
       // TODO: Implement actual notification sending logic
       // For now, just add to local list
       activeAlerts.add(alert);
+      fetchFamilyAlerts(homeController.familyId.value);
 
       Get.snackbar(
         'Success',
@@ -177,5 +188,88 @@ class EmergencyController extends GetxController {
     return activeAlerts
         .where((alert) => alert.status == AlertStatus.resolved)
         .toList();
+  }
+
+  // Fetch family alerts from API
+  Future<void> fetchFamilyAlerts(String familyId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${AppRoute.baseUrl}/api/emergency/family/$familyId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final Map<String, dynamic> body =
+            response.body.isNotEmpty ? jsonDecode(response.body) : {};
+        print("alerts: ${response.body}");
+        final List<dynamic> alertsJson = body['alerts'] ?? [];
+        familyAlerts.value = alertsJson.map((json) {
+          final coords = json['location']['coordinates'] as List<dynamic>;
+          return EmergencyAlert(
+            id: json['_id']['\$oid'] ?? '',
+            senderId: json['user_id']['\$oid'] ?? '',
+            senderName: '', // Not provided
+            type:
+                EmergencyType.other, // You may want to parse this if available
+            message: json['message'] ?? '',
+            timestamp: DateTime.parse(json['timestamp']['\$date']),
+            latitude: coords[1] ?? 0.0,
+            longitude: coords[0] ?? 0.0,
+            location: '', // Not provided
+            additionalInfo: {},
+            status: _parseStatus(json['status']),
+            acknowledgedBy: [],
+          );
+        }).toList();
+      } else {
+        Get.snackbar('Error', 'Failed to fetch family alerts');
+      }
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to fetch family alerts: $e');
+    }
+  }
+
+  // Helper to parse status
+  AlertStatus _parseStatus(String? status) {
+    switch (status) {
+      case 'active':
+        return AlertStatus.active;
+      case 'acknowledged':
+        return AlertStatus.acknowledged;
+      case 'resolved':
+        return AlertStatus.resolved;
+      default:
+        return AlertStatus.active;
+    }
+  }
+
+  // Resolve alert via API
+  Future<void> resolveAlertApi(String alertId) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${AppRoute.baseUrl}/api/emergency/resolve/$alertId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        Get.snackbar('Success', 'Alert resolved');
+        // Optionally refresh alerts
+      } else {
+        Get.snackbar('Error', 'Failed to resolve alert');
+      }
+    } catch (e) {
+      Get.snackbar('Error', 'Failed to resolve alert: $e');
+    }
+  }
+
+  // Center map on alert location
+  void centerMapOnAlert(double lat, double lng) {
+    mapController.move(LatLng(lat, lng), 15.0);
+    selectedAlertLocation.value = LatLng(lat, lng);
+  }
+
+  // Center map on user location
+  void centerMapOnUser() {
+    mapController.move(
+        LatLng(currentLatitude.value, currentLongitude.value), 13.0);
+    selectedAlertLocation.value = null;
   }
 }

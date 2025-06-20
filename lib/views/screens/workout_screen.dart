@@ -9,38 +9,47 @@ class WorkoutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("AI Workout Planner"),
-        actions: [
-          if (controller.workoutPlan.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () => controller.workoutPlan.clear(),
-              tooltip: 'Create New Plan',
-            )
-        ],
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: Obx(() => controller.isLoading.value
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (controller.workoutPlan.isEmpty) _buildQuickStart(),
-                    if (controller.workoutPlan.isEmpty)
-                      const SizedBox(height: 24),
-                    controller.workoutPlan.isEmpty
-                        ? _buildForm()
-                        : _buildPlan(),
-                    SizedBox(
-                        height: MediaQuery.of(context).padding.bottom + 16),
-                  ],
-                ),
-              )),
+    return WillPopScope(
+      onWillPop: () async {
+        if (controller.workoutPlan.isNotEmpty) {
+          controller.workoutPlan.clear();
+          return false; // Don't pop the route, just clear the plan
+        }
+        return true; // Pop the route as normal
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("AI Workout Planner"),
+          actions: [
+            if (controller.workoutPlan.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () => controller.workoutPlan.clear(),
+                tooltip: 'Create New Plan',
+              )
+          ],
+        ),
+        body: SafeArea(
+          bottom: false,
+          child: Obx(() => controller.isLoading.value
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (controller.workoutPlan.isEmpty) _buildQuickStart(),
+                      if (controller.workoutPlan.isEmpty)
+                        const SizedBox(height: 24),
+                      controller.workoutPlan.isEmpty
+                          ? _buildForm()
+                          : _buildPlan(),
+                      SizedBox(
+                          height: MediaQuery.of(context).padding.bottom + 16),
+                    ],
+                  ),
+                )),
+        ),
       ),
     );
   }

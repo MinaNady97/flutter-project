@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../core/constants/routes.dart';
 import '../core/services/notification_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeController extends GetxController {
   final RxString userId =
@@ -19,6 +20,7 @@ class HomeController extends GetxController {
 
   @override
   void onInit() {
+    _loadUserPrefs();
     fetchUserData();
     super.onInit();
   }
@@ -31,6 +33,18 @@ class HomeController extends GetxController {
       _notificationService = Get.find<NotificationService>();
     } catch (e) {
       print('NotificationService not available yet: $e');
+    }
+  }
+
+  Future<void> _loadUserPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedUserId = prefs.getString('user_id');
+    final savedUsername = prefs.getString('username');
+    if (savedUserId != null && savedUserId.isNotEmpty) {
+      userId.value = savedUserId;
+    }
+    if (savedUsername != null && savedUsername.isNotEmpty) {
+      username.value = savedUsername;
     }
   }
 
@@ -163,9 +177,17 @@ class HomeController extends GetxController {
 
   void setUserId(String newId) {
     userId.value = newId;
+    _saveUserPrefs();
   }
 
   void setUsername(String newName) {
     username.value = newName;
+    _saveUserPrefs();
+  }
+
+  Future<void> _saveUserPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_id', userId.value);
+    await prefs.setString('username', username.value);
   }
 }
